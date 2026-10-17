@@ -15,6 +15,7 @@ mod permissions;
 mod private_context;
 mod profiles;
 mod progress;
+mod providers;
 mod revisions;
 mod runtime;
 mod scoped_resources;
@@ -278,6 +279,9 @@ fn app(state: Arc<AppState>) -> Router {
         .route("/api/traces/:operation", get(trace_export))
         .route("/api/approval-requests", get(approval_requests))
         .route("/api/model", post(set_model))
+        .route("/api/llm-providers", get(llm_providers))
+        .route("/api/llm-providers/:slug/attach", post(attach_provider))
+        .route("/api/llm-providers/:slug/detach", post(detach_provider))
         .route("/api/participants", get(participants))
         .route("/api/admins/bootstrap", post(bootstrap))
         .route("/api/admins/requests", post(request_admin))
@@ -343,6 +347,58 @@ async fn models(State(s): State<Arc<AppState>>) -> Response {
     match rt.llm.models().await {
         Ok(models) => Json(json!({"models":models})).into_response(),
         Err(_) => (StatusCode::BAD_GATEWAY, "Cannot reach Reefy LLM proxy").into_response(),
+    }
+}
+async fn llm_providers(State(s): State<Arc<AppState>>) -> Response {
+    let Some(rt) = &s.runtime else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    Json(rt.llm.providers.status()).into_response()
+}
+async fn attach_provider(
+    State(s): State<Arc<AppState>>,
+    axum::extract::Path(slug): axum::extract::Path<String>,
+) -> Response {
+    let Some(rt) = &s.runtime else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    if rt.llm.providers.spec(&slug).is_none() {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    match rt.llm.providers.start_attach(&slug).await {
+        Ok(status) => {
+            rt.store.log(
+                "info",
+                "llm_provider_sign_in_started",
+                None,
+                "LLM provider sign-in started",
+            );
+            Json(status).into_response()
+        }
+        Err(e) => (StatusCode::BAD_GATEWAY, e.to_string()).into_response(),
+    }
+}
+async fn detach_provider(
+    State(s): State<Arc<AppState>>,
+    axum::extract::Path(slug): axum::extract::Path<String>,
+) -> Response {
+    let Some(rt) = &s.runtime else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    if rt.llm.providers.spec(&slug).is_none() {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    match rt.llm.providers.detach(&slug) {
+        Ok(status) => {
+            rt.store.log(
+                "info",
+                "llm_provider_detached",
+                None,
+                "LLM provider detached",
+            );
+            Json(status).into_response()
+        }
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
     }
 }
 async fn set_model(

@@ -54,9 +54,14 @@
 </section>
 <section id="model-page" class="page" aria-labelledby="model-title" hidden>
  <h1 id="model-title" tabindex="-1">Language model</h1>
+<section id="providers-panel" class="panel">
+ <h2>LLM Providers</h2>
+ <p>Attach a subscription and Carbon calls it directly. Without one, Carbon uses the Reefy LLM proxy.</p>
+ <div id="provider-rows"></div>
+</section>
 <section id="model-panel" class="panel">
  <h2>Model selection</h2>
- <label for="model">Model from Reefy LLM proxy</label>
+ <label for="model">Model</label>
  <select id="model" disabled><option>No models loaded</option></select>
  <div class="actions"><button id="reload-models">Refresh models</button><button id="save-model" disabled>Save model</button></div>
  <p id="model-help" aria-live="polite"></p>

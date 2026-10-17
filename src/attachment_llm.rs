@@ -35,6 +35,10 @@ impl Llm {
         if !model.starts_with("xai/") {
             bail!("Attachment provider unsupported")
         }
+        // An attached xAI subscription receives these uploads directly, never via the proxy.
+        if self.providers.attached("xai") {
+            return Ok(());
+        }
         let models = self.models().await?;
         if models.is_empty() || !models.iter().all(|id| id.starts_with("xai/")) {
             bail!("Attachment routing requires an xAI-only proxy")
@@ -43,12 +47,13 @@ impl Llm {
     }
     async fn delete_provider_file(&self, id: &str) -> Result<()> {
         let response = self
-            .client
-            .delete(format!("{}/files/{id}", self.base))
-            .bearer_auth(&self.key)
-            .json(&json!({"model":"xai/grok-4.7"}))
-            .timeout(Duration::from_secs(10))
-            .send()
+            .send(
+                self.client
+                    .delete(format!("{}/files/{id}", self.base))
+                    .bearer_auth(&self.key)
+                    .json(&json!({"model":"xai/grok-4.7"}))
+                    .timeout(Duration::from_secs(10)),
+            )
             .await?;
         if !response.status().is_success() && response.status() != reqwest::StatusCode::NOT_FOUND {
             bail!("Provider cleanup unavailable")

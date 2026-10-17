@@ -34,6 +34,7 @@ pub struct Llm {
     pub(crate) client: reqwest::Client,
     pub(crate) base: String,
     pub(crate) key: String,
+    pub(crate) providers: Arc<crate::providers::Providers>,
 }
 impl Llm {
     pub fn from_env() -> Result<Self> {
@@ -61,6 +62,7 @@ impl Llm {
                 .build()?,
             base: base.trim_end_matches('/').to_owned(),
             key,
+            providers: Arc::new(crate::providers::Providers::memory()),
         })
     }
     pub(crate) async fn decode(&self, mut response: reqwest::Response) -> Result<Value> {
@@ -76,7 +78,20 @@ impl Llm {
         }
         Ok(serde_json::from_slice(&bytes)?)
     }
+    /// Attached subscription providers' models plus the proxy's. Either source may be down.
     pub async fn models(&self) -> Result<Vec<String>> {
+        let (mut ids, direct_error) = self.direct_models().await;
+        match self.proxy_models().await {
+            Ok(proxy) => ids.extend(proxy),
+            Err(e) if ids.is_empty() => return Err(direct_error.unwrap_or(e)),
+            Err(_) => {}
+        }
+        ids.sort();
+        ids.dedup();
+        ids.truncate(200);
+        Ok(ids)
+    }
+    async fn proxy_models(&self) -> Result<Vec<String>> {
         let value = self
             .decode(
                 self.client
