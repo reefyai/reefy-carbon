@@ -285,7 +285,7 @@ fn app(state: Arc<AppState>) -> Router {
         .route("/api/participants", get(participants))
         .route("/api/admins/bootstrap", post(bootstrap))
         .route("/api/admins/requests", post(request_admin))
-        .route("/api/admins/removals", post(request_admin_removal))
+        .route("/api/admins/removals", post(remove_admin))
         .route("/api/whatsapp/qr.svg", get(qr))
         .route("/api/whatsapp/pair-code", post(pair_code))
         .route("/api/whatsapp/pairing-view", post(pairing_view))
@@ -454,20 +454,36 @@ async fn request_admin(
     let Some(rt) = &s.runtime else {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
-    match rt.store.propose_web_admin(request.user.to_string()) {
-        Ok(value) => Json(value).into_response(),
+    match rt.store.add_web_admin(request.user.to_string()) {
+        Ok(value) => {
+            rt.store.log(
+                "info",
+                "approval_admin_added",
+                None,
+                "Approval admin added from web console",
+            );
+            Json(value).into_response()
+        }
         Err(e) => (StatusCode::CONFLICT, e.to_string()).into_response(),
     }
 }
-async fn request_admin_removal(
+async fn remove_admin(
     State(s): State<Arc<AppState>>,
     Json(request): Json<AdminRequest>,
 ) -> Response {
     let Some(rt) = &s.runtime else {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
-    match rt.store.propose_web_admin_removal(request.user.to_string()) {
-        Ok(value) => Json(value).into_response(),
+    match rt.store.remove_web_admin(request.user.to_string()) {
+        Ok(value) => {
+            rt.store.log(
+                "info",
+                "approval_admin_removed",
+                None,
+                "Approval admin removed from web console",
+            );
+            Json(value).into_response()
+        }
         Err(e) => (StatusCode::CONFLICT, e.to_string()).into_response(),
     }
 }
@@ -750,7 +766,7 @@ mod tests {
         req
     }
     #[tokio::test]
-    async fn web_admin_request_route_enforces_guards_and_only_stages() {
+    async fn web_admin_add_route_enforces_guards_and_applies() {
         let dir = tempfile::tempdir().unwrap();
         let rt = runtime::Runtime::open(dir.path(), 50, 500).unwrap();
         rt.store.ingest("admin@test", "a", "hello").unwrap();
@@ -792,7 +808,7 @@ mod tests {
         }
         assert_eq!(
             rt.store.permission_directory(&candidate.user).unwrap()["can_manage_approval_admins"],
-            false
+            true
         );
         assert!(rt
             .store
@@ -800,7 +816,7 @@ mod tests {
             .unwrap()
             .unwrap()
             .2
-            .contains("Requested from Carbon web UI"));
+            .starts_with("You are now a Carbon approval admin."));
     }
     #[tokio::test]
     async fn trace_download_route_is_authenticated_and_matches_uuid() {

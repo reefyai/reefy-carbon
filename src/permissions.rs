@@ -1,6 +1,6 @@
 //! Deterministic authorization and request-bound second-person review.
 use crate::store::{Store, Work};
-use anyhow::{ensure, Context, Result};
+use anyhow::{bail, ensure, Context, Result};
 use rusqlite::{params, Connection, OptionalExtension};
 use serde::{Deserialize, Serialize};
 use serde_json::{json, Value};
@@ -489,7 +489,7 @@ pub(crate) fn validate(db: &Connection, actor: &str, change: &Change) -> Result<
             Ok(format!("{active}:{revision}"))
         }
         Change::AddApprovalAdmin { user } | Change::RemoveApprovalAdmin { user } => {
-            // The web principal may only stage admin additions/removals; a WhatsApp admin approves.
+            // The web console principal changes approval admins directly (operator authority).
             ensure!(
                 is_reviewer(db, actor)? || actor == WEB_ADMIN_REQUESTER,
                 "Only current approval admins may change approval admins"
@@ -902,11 +902,54 @@ impl Store {
             json!({"self":actor,"can_manage_groups":manager,"can_manage_approval_admins":approval_admin,"approval_available":!reviewers(&db)?.is_empty(),"approval_admins_visible":approval_admin,"approval_admins":if approval_admin {reviewers(&db)?}else{Vec::<String>::new()},"groups":groups,"participants":people}),
         )
     }
-    pub fn propose_web_admin(&self, user: String) -> Result<Value> {
-        self.propose_internal(WEB_ADMIN_REQUESTER, Change::AddApprovalAdmin { user })
+    pub fn add_web_admin(&self, user: String) -> Result<Value> {
+        self.change_web_admin(Change::AddApprovalAdmin { user })
     }
-    pub fn propose_web_admin_removal(&self, user: String) -> Result<Value> {
-        self.propose_internal(WEB_ADMIN_REQUESTER, Change::RemoveApprovalAdmin { user })
+    pub fn remove_web_admin(&self, user: String) -> Result<Value> {
+        self.change_web_admin(Change::RemoveApprovalAdmin { user })
+    }
+    /// The web console acts as operator: admin changes apply at once, with the same identity,
+    /// last-admin, barrier and notice handling as an approved WhatsApp request.
+    fn change_web_admin(&self, change: Change) -> Result<Value> {
+        let (user, source, notice) = match &change {
+            Change::AddApprovalAdmin { user } => (user.clone(), "Added from Carbon web UI.", "You are now a Carbon approval admin. To decide a request, use WhatsApp Reply on its approval notice and send approve or reject."),
+            Change::RemoveApprovalAdmin { user } => (user.clone(), "Removed from Carbon web UI.", "You are no longer a Carbon approval admin."),
+            _ => bail!("Unsupported web admin change"),
+        };
+        let _authority = self.authority.lock().unwrap();
+        let mut db = self.db.lock().unwrap();
+        let tx = db.transaction()?;
+        ensure!(
+            !reviewers(&tx)?.is_empty(),
+            "Select initial reviewers before changing approval admins"
+        );
+        tx.execute(
+            "INSERT OR IGNORE INTO users(id) VALUES(?)",
+            [WEB_ADMIN_REQUESTER],
+        )?;
+        let snapshot = validate(&tx, WEB_ADMIN_REQUESTER, &change)?;
+        let id = Uuid::new_v4().to_string();
+        tx.execute(
+            "INSERT INTO proposals(id,requester,operation,snapshot,state,reviewer) VALUES(?,?,?,?,'approved',?)",
+            params![id, WEB_ADMIN_REQUESTER, serde_json::to_string(&change)?, snapshot, WEB_ADMIN_REQUESTER],
+        )?;
+        let summary = change_summary(&tx, &change)?;
+        tx.execute(
+            "INSERT INTO proposal_summaries VALUES(?,?)",
+            params![id, format!("{}\n{source}", summary.trim_end_matches('?'))],
+        )?;
+        apply(&tx, &id, WEB_ADMIN_REQUESTER, &change)?;
+        tx.execute(
+            "INSERT INTO audit(event,subject) VALUES('permission_decided',?)",
+            [json!({"id":id,"reviewer":WEB_ADMIN_REQUESTER,"state":"approved","operation":change}).to_string()],
+        )?;
+        reconcile_admin_requests(&tx)?;
+        tx.execute(
+            "INSERT OR IGNORE INTO control_outbox(proposal,recipient,kind,text) VALUES(?,?,'result',?)",
+            params![id, user, notice],
+        )?;
+        tx.commit()?;
+        Ok(json!({"request_id":id,"state":"approved"}))
     }
     pub fn propose(&self, actor: &str, change: Change) -> Result<Value> {
         ensure!(
@@ -1283,9 +1326,9 @@ mod tests {
         (d, s, a, b, c)
     }
     #[test]
-    fn web_admin_requests_require_verified_target_and_whatsapp_approval() {
-        let (_d, s, a, _b, c) = setup();
-        assert!(s.propose_web_admin("invented".into()).is_err());
+    fn web_admin_additions_apply_immediately_to_verified_participants() {
+        let (_d, s, _a, _b, c) = setup();
+        assert!(s.add_web_admin("invented".into()).is_err());
         assert!(s
             .propose(
                 WEB_ADMIN_REQUESTER,
@@ -1306,23 +1349,26 @@ mod tests {
         assert_eq!(directory["approval_available"], true);
         assert_eq!(directory["approval_admins_visible"], false);
         assert_eq!(directory["approval_admins"], json!([]));
-        let proposal = s.propose_web_admin(c.user.clone()).unwrap();
         assert_eq!(
-            s.propose_web_admin(c.user.clone()).unwrap()["request_id"],
-            proposal["request_id"]
+            s.add_web_admin(c.user.clone()).unwrap()["state"],
+            "approved"
         );
-        assert_eq!(
-            s.permission_directory(&c.user).unwrap()["can_manage_approval_admins"],
-            false
-        );
-        let id = proposal["request_id"].as_str().unwrap();
-        assert!(approve(&s, &c.recipient, id).contains("sealed reviewer"));
-        assert!(approve(&s, &a.recipient, id).contains("approved"));
         assert_eq!(
             s.permission_directory(&c.user).unwrap()["can_manage_approval_admins"],
             true
         );
-        assert!(s.propose_web_admin(c.user).is_err());
+        assert_eq!(reviewers(&s.db.lock().unwrap()).unwrap().len(), 3);
+        let notice: String =
+            s.db.lock()
+                .unwrap()
+                .query_row(
+                    "SELECT text FROM control_outbox WHERE recipient=? AND kind='result'",
+                    [&c.user],
+                    |r| r.get(0),
+                )
+                .unwrap();
+        assert!(notice.starts_with("You are now a Carbon approval admin."));
+        assert!(s.add_web_admin(c.user).is_err());
         assert_eq!(
             s.db.lock()
                 .unwrap()
@@ -1344,7 +1390,7 @@ mod tests {
             s.permission_directory(&user.user).unwrap()["approval_available"],
             false
         );
-        assert!(s.propose_web_admin(user.user.clone()).is_err());
+        assert!(s.add_web_admin(user.user.clone()).is_err());
         s.bootstrap_admins(&[user.user]).unwrap();
         assert!(s
             .propose_internal(
@@ -1364,16 +1410,42 @@ mod tests {
             .is_err());
     }
     #[test]
-    fn web_admin_removals_only_stage_and_keep_the_last_admin() {
+    fn web_admin_removal_applies_immediately_and_keeps_the_last_admin() {
         let (_d, s, a, b, c) = setup();
-        assert!(s.propose_web_admin_removal(c.user.clone()).is_err());
-        let proposal = s.propose_web_admin_removal(b.user.clone()).unwrap();
-        let id = proposal["request_id"].as_str().unwrap();
-        assert_eq!(reviewers(&s.db.lock().unwrap()).unwrap().len(), 2);
-        assert!(approve(&s, &c.recipient, id).contains("sealed reviewer"));
-        assert!(approve(&s, &a.recipient, id).contains("approved"));
+        let pending = propose(
+            &s,
+            &a.user,
+            Change::AddApprovalAdmin {
+                user: c.user.clone(),
+            },
+        );
+        assert!(s.remove_web_admin(c.user.clone()).is_err());
+        assert!(s.remove_web_admin("invented".into()).is_err());
+        assert_eq!(
+            s.remove_web_admin(b.user.clone()).unwrap()["state"],
+            "approved"
+        );
         assert_eq!(reviewers(&s.db.lock().unwrap()).unwrap(), [a.user.clone()]);
-        assert!(s.propose_web_admin_removal(a.user).is_err());
+        let db = s.db.lock().unwrap();
+        // The removed admin gets a notice and loses queued reviews; unrelated requests stay live.
+        let notice: String = db
+            .query_row(
+                "SELECT text FROM control_outbox WHERE recipient=? AND kind='result'",
+                [&b.user],
+                |r| r.get(0),
+            )
+            .unwrap();
+        assert_eq!(notice, "You are no longer a Carbon approval admin.");
+        let live: i64 = db.query_row("SELECT COUNT(*) FROM control_outbox WHERE recipient=? AND kind='review' AND state='pending'", [&b.user], |r| r.get(0)).unwrap();
+        assert_eq!(live, 0);
+        let state: String = db
+            .query_row("SELECT state FROM proposals WHERE id=?", [&pending], |r| {
+                r.get(0)
+            })
+            .unwrap();
+        assert_eq!(state, "pending");
+        drop(db);
+        assert!(s.remove_web_admin(a.user).is_err());
     }
     fn propose(s: &Store, actor: &str, change: Change) -> String {
         s.propose(actor, change).unwrap()["request_id"]
