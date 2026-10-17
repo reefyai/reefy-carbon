@@ -1,3 +1,5 @@
+[![Watch the Carbon demo](https://img.youtube.com/vi/Q92EjvljhMw/hqdefault.jpg)](https://youtu.be/Q92EjvljhMw)
+
 We’re building Carbon, an AI agent built for multiple people and the private knowledge - from community conversations to company information. Try it at the Miami AI Hackathon: send a WhatsApp message to +1 (305) 525-8062 and ask about teams, notable projects, photos and more - knowledge you won’t find on the public web.
 
 ## What we built at the hackathon
