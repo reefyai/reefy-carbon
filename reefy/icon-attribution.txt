@@ -1,0 +1,7 @@
+Generated with the built-in image generation tool.
+Base: Lorenz attractor yb.svg by Wikimol and Dschwen.
+Source: https://commons.wikimedia.org/wiki/File:Lorenz_attractor_yb.svg
+License: CC BY-SA 3.0, https://creativecommons.org/licenses/by-sa/3.0/
+Changes: monochrome treatment and increased trajectory visibility.
+
+Edit the supplied Lorenz attractor reference into a logo that looks VERY SIMILAR to the original. This is a faithful treatment, not an abstract redesign. Preserve its precise upright butterfly arrangement, asymmetry, outward-leaning elongated lobes, slanted hollow centers, many tightly nested irregular trajectories and dense central crossing. Keep approximately the same number of fine lines as the original; do not collapse them into thick ribbons or simplified rings. Preserve the natural variation in trajectories. Change the yellow/orange lines to clean bright white on solid black, with slightly increased fine-line visibility. Keep the original geometry and orientation, center with modest balanced padding in a square image. No sharp added spikes, lettering, dots, speech bubbles, tiles, embellishments, glow, gradients, shadows or 3D. The result should look like the same scientific attractor image in monochrome, suitable as a detailed logo.

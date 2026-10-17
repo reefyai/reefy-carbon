@@ -1,0 +1,12 @@
+*
+!Cargo.toml
+!Cargo.lock
+!src/
+!src/**
+!prompts/
+!prompts/**
+!web/
+!web/**
+!scripts/
+!scripts/container-entrypoint.sh
+!VERSION

@@ -1,0 +1,111 @@
+<!doctype html>
+<html lang="en">
+<head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><title>Carbon</title><link rel="icon" type="image/png" href="/favicon.png?v=carbon-black-lines-20261011"><link rel="stylesheet" href="/app.css"><script src="/app.js" defer></script></head>
+<body>
+<a id="skip-content" class="skip-link" href="#main-content">Skip to content</a>
+<header class="app-header">
+ <button id="mobile-nav-toggle" class="icon-button" type="button" aria-controls="app-navigation" aria-expanded="false" aria-label="Open navigation" title="Open navigation"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+ <img class="brand-logo" src="/logo.png?v=carbon-20261011" width="48" height="48" alt="">
+ <p class="brand-name">Carbon</p>
+</header>
+<aside id="app-navigation" class="sidebar">
+ <div class="sidebar-controls">
+
+ <button id="nav-close" class="icon-button" type="button" aria-label="Close navigation"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m6 6 12 12M6 18 18 6"/></svg></button>
+ </div>
+ <nav aria-label="Carbon navigation"><ul>
+<li><a href="#channels" data-page="channels" aria-label="Communication Channels" title="Communication Channels"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M21 11.5a8.4 8.4 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.4 8.4 0 0 1-3.8-.9L3 21l1.9-5.7a8.4 8.4 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.4 8.4 0 0 1 3.8-.9H13a8.5 8.5 0 0 1 8 8v.5Z"/></svg><span class="nav-label">Communication Channels</span></a></li>
+<li><a href="#model" data-page="model" aria-label="Language model" title="Language model"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 4.5v9L12 21l-8-4.5v-9L12 3Z"/><path d="m4 7.5 8 4.5 8-4.5M12 12v9"/></svg><span class="nav-label">Language model</span></a></li>
+<li><a href="#admin" data-page="admin" aria-label="Admin" title="Admin"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="m12 3 8 3v6c0 5-8 9-8 9s-8-4-8-9V6l8-3Z"/><path d="m8 12 3 3 5-6"/></svg><span class="nav-label">Admin</span></a></li>
+<li><a href="#activity" data-page="activity" aria-label="Activity &amp; debug" title="Activity &amp; debug"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M3 12h4l3-8 4 16 3-8h4"/></svg><span class="nav-label">Activity &amp; debug</span></a></li>
+ </ul></nav>
+ <div class="sidebar-footer">
+ <button id="nav-toggle" class="icon-button" type="button" aria-controls="app-navigation" aria-expanded="true" aria-label="Collapse navigation" title="Collapse navigation"><svg class="collapse-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="m14 6-6 6 6 6"/></svg><svg class="menu-icon" viewBox="0 0 24 24" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+ </div>
+</aside>
+<button id="nav-backdrop" class="nav-backdrop" type="button" aria-label="Close navigation" tabindex="-1" hidden></button>
+<main id="main-content" tabindex="-1">
+<p id="error" role="alert" hidden></p>
+<section id="channels-page" class="page" aria-labelledby="channels-title">
+ <h1 id="channels-title" tabindex="-1">Communication Channels</h1>
+<details id="whatsapp-panel" class="panel">
+ <summary>WhatsApp <span id="connection" class="status">Loading…</span></summary>
+ <div class="actions"><button id="unlink-whatsapp" hidden>Unlink WhatsApp</button></div>
+ <p id="relink-help" role="status" hidden>Relink WhatsApp; chats and files are saved.</p>
+ <img id="qr" width="280" height="280" alt="WhatsApp pairing QR code" hidden>
+ <p id="qr-loading" role="status" hidden><span class="spinner" aria-hidden="true"></span> Preparing QR code…</p>
+ <p id="qr-expiry" aria-live="polite" hidden></p>
+ <div id="pairing-help">
+ <p>Open WhatsApp → Linked devices → Link a device.</p>
+ <form id="phone-link">
+  <label for="phone-number">Or link with your phone number</label>
+  <input id="phone-number" type="tel" autocomplete="tel" placeholder="+1 202 555 0123" maxlength="40" required aria-describedby="phone-help">
+  <p id="phone-help">Include your country code.</p>
+  <button id="request-code" type="submit">Get linking code</button>
+ </form>
+ <div id="pair-code-result" hidden aria-live="polite">
+  <p>In WhatsApp, choose <strong>Link with phone number instead</strong> and enter:</p>
+  <output id="pair-code"></output>
+  <p id="pair-code-expiry"></p>
+ </div>
+ </div>
+</details>
+
+</section>
+<section id="model-page" class="page" aria-labelledby="model-title" hidden>
+ <h1 id="model-title" tabindex="-1">Language model</h1>
+<section id="model-panel" class="panel">
+ <h2>Model selection</h2>
+ <label for="model">Model from Reefy LLM proxy</label>
+ <select id="model" disabled><option>No models loaded</option></select>
+ <div class="actions"><button id="reload-models">Refresh models</button><button id="save-model" disabled>Save model</button></div>
+ <p id="model-help" aria-live="polite"></p>
+</section>
+
+</section>
+<section id="admin-page" class="page" aria-labelledby="admin-title" hidden>
+ <h1 id="admin-title" tabindex="-1">Admin</h1>
+<section id="review-panel" class="panel">
+ <h2>Approval admins</h2>
+ <p id="reviewer-help">Choose one or more admins who have messaged Carbon privately.</p>
+ <div id="admin-rows"></div>
+ <form id="request-admin-form" hidden>
+  <label for="admin-candidate">New admin</label><select id="admin-candidate"></select>
+  <button id="request-admin" type="submit">Request admin approval</button>
+  <p id="admin-request-status" role="status"></p>
+ </form>
+ <div class="actions"><button id="add-admin">+ Add admin</button><button id="reload-participants">Refresh participants</button><button id="save-admins">Seal initial admins</button></div>
+ <p id="admin-help" aria-live="polite">Selection can be saved once. Any admin can approve requests, including their own, through WhatsApp.</p>
+</section>
+<section id="approvals-panel" class="panel">
+ <h2>Approval requests</h2>
+ <p>In WhatsApp, reply to the request with approve or reject.</p>
+ <button id="reload-approvals" type="button">Refresh</button>
+ <p id="approvals-status" role="status"></p>
+ <ul id="approvals-list"></ul>
+</section>
+
+</section>
+<section id="activity-page" class="page" aria-labelledby="activity-title" hidden>
+ <h1 id="activity-title" tabindex="-1">Activity &amp; debug</h1>
+<section id="debug-panel" class="panel">
+ <h2>System activity</h2>
+ <p>Latest 1,000 events. Kept for up to 7 days or 1,000 events. Message contents and credentials are excluded.</p>
+ <button id="reload-activity" type="button">Refresh activity</button>
+ <p id="activity-status" role="status"></p>
+ <ol id="activity-list"></ol>
+</section>
+
+</section>
+</main>
+<dialog id="whatsapp-confirm" class="confirm-modal" aria-labelledby="whatsapp-confirm-title" aria-describedby="whatsapp-confirm-description">
+ <form id="whatsapp-confirm-form" method="dialog">
+  <h2 id="whatsapp-confirm-title">Relink WhatsApp?</h2>
+  <p id="whatsapp-confirm-description"></p>
+  <div class="actions">
+   <button value="cancel" autofocus>Cancel</button>
+   <button id="whatsapp-confirm-submit" value="confirm">Relink WhatsApp</button>
+  </div>
+ </form>
+</dialog>
+</body></html>

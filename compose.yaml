@@ -1,0 +1,24 @@
+name: reefy-carbon
+services:
+  carbon:
+    build: .
+    image: reefy-carbon:local
+    restart: unless-stopped
+    read_only: true
+    cap_drop: [ALL]
+    security_opt: ["no-new-privileges:true"]
+    mem_limit: 512m
+    memswap_limit: 512m
+    pids_limit: 128
+    environment:
+      OPENAI_BASE_URL: ${OPENAI_BASE_URL:-http://reefy-llm-proxy:9080/v1}
+      OPENAI_API_KEY: ${OPENAI_API_KEY:-unused}
+    ports:
+      - "${CARBON_BIND_IP:-127.0.0.1}:${CARBON_PORT:-18082}:18080"
+    volumes:
+      - data:/data
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=16m,uid=10001,gid=10001
+volumes:
+  data:
+    name: reefy-carbon-data

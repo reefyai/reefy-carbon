@@ -1,0 +1,29 @@
+[package]
+name = "reefy-carbon"
+version = "0.1.0"
+edition = "2021"
+default-run = "reefy-carbon"
+
+[dependencies]
+axum = "0.7"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal", "time", "sync"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64 = "0.22"
+sha2 = "0.10"
+subtle = "2"
+anyhow = "1.0.104"
+uuid = { version = "1.26.1", features = ["v4", "serde"] }
+rusqlite = { version = "0.39", features = ["bundled"] }
+git2 = { version = "0.21.0", default-features = false }
+qrcode = { version = "0.14.1", default-features = false, features = ["svg"] }
+fs2 = "0.4.3"
+whatsapp-rust = { version = "=0.7.0", default-features = false, features = ["sqlite-storage", "tokio-transport", "tokio-runtime", "ureq-client", "tokio-native", "signal"] }
+reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "multipart"] }
+
+ureq = { version = "3.4.2", default-features = false, features = ["rustls"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["test-util"] }
+tempfile = "3.27.0"
+tower = { version = "0.5", features = ["util"] }

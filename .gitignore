@@ -1,0 +1,10 @@
+/target/
+/carbon-web.json
+*.sqlite*
+*.db*
+.env
+
+/secrets/
+
+__pycache__/
+*.pyc

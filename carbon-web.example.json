@@ -1,0 +1,7 @@
+{
+  "listen": "127.0.0.1:18080",
+  "auth": {
+    "mode": "basic",
+    "password_file": "/data/state/secrets/admin-password"
+  }
+}

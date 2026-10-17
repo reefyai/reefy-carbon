@@ -1,0 +1,61 @@
+%PDF-1.4
+1 0 obj
+<< /Type /Catalog /Pages 2 0 R >>
+endobj
+2 0 obj
+<< /Type /Pages /Kids [3 0 R 4 0 R 5 0 R] /Count 3 >>
+endobj
+3 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 6 0 R >> /XObject << /Im1 10 0 R >> >> /Contents 7 0 R >>
+endobj
+4 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 6 0 R >> /XObject << /Im1 10 0 R >> >> /Contents 8 0 R >>
+endobj
+5 0 obj
+<< /Type /Page /Parent 2 0 R /MediaBox [0 0 612 792] /Resources << /Font << /F1 6 0 R >> /XObject << /Im1 10 0 R >> >> /Contents 9 0 R >>
+endobj
+6 0 obj
+<< /Type /Font /Subtype /Type1 /BaseFont /Helvetica >>
+endobj
+7 0 obj
+<< /Length 54 >>
+stream
+BT /F1 12 Tf 50 700 Td (First page: Request 481) Tj ET
+endstream
+endobj
+8 0 obj
+<< /Length 57 >>
+stream
+BT /F1 12 Tf 50 700 Td (Second page: Permit notice) Tj ET
+endstream
+endobj
+9 0 obj
+<< /Length 33 >>
+stream
+q 100 0 0 100 50 600 cm /Im1 Do Q
+endstream
+endobj
+10 0 obj
+<< /Type /XObject /Subtype /Image /Width 1 /Height 1 /ColorSpace /DeviceRGB /BitsPerComponent 8 /Filter /ASCIIHexDecode /Length 7 >>
+stream
+FF0000>
+endstream
+endobj
+xref
+0 11
+0000000000 65535 f 
+0000000009 00000 n 
+0000000058 00000 n 
+0000000127 00000 n 
+0000000280 00000 n 
+0000000433 00000 n 
+0000000586 00000 n 
+0000000656 00000 n 
+0000000760 00000 n 
+0000000867 00000 n 
+0000000950 00000 n 
+trailer
+<< /Size 11 /Root 1 0 R >>
+startxref
+1124
+%%EOF

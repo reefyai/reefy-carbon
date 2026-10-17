@@ -1,0 +1,82 @@
+name: Carbon container check
+on:
+  push:
+    branches: [main]
+  pull_request:
+permissions:
+  contents: read
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.head.repo.full_name || github.repository }}-${{ github.event_name == 'workflow_dispatch' && github.run_id || (github.head_ref && format('refs/heads/{0}', github.head_ref)) || github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' || (github.event_name == 'push' && github.ref_type == 'branch') }}
+
+jobs:
+  test:
+    runs-on: ${{ fromJSON((github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && '["ubuntu-latest"]' || '["self-hosted","Linux","X64","big-bird"]') }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Fetch container bases with bounded download retries
+        shell: bash
+        run: |
+          base_deadline=$((SECONDS + 300))
+          while read -r base_image; do
+            base_delay=5
+            while true; do
+              base_remaining=$((base_deadline - SECONDS))
+              if ((base_remaining <= 0)); then
+                echo "Container base download retry budget exhausted"
+                exit 1
+              fi
+              if timeout "$base_remaining" docker pull "$base_image" > "$RUNNER_TEMP/carbon-base-pull.log" 2>&1; then
+                cat "$RUNNER_TEMP/carbon-base-pull.log"
+                break
+              fi
+              cat "$RUNNER_TEMP/carbon-base-pull.log"
+              if ! grep -Eiq 'bad record MAC|TLS handshake timeout|unexpected EOF|connection reset|connection refused|i/o timeout|temporary failure|context deadline exceeded|unexpected status.*(502|503|504|429)|toomanyrequests' "$RUNNER_TEMP/carbon-base-pull.log"; then
+                exit 1
+              fi
+              base_remaining=$((base_deadline - SECONDS))
+              if ((base_remaining <= base_delay)); then exit 1; fi
+              sleep "$base_delay"
+              base_delay=$((base_delay * 2 < 30 ? base_delay * 2 : 30))
+            done
+          done < <(awk 'toupper($1) == "FROM" {print $2}' Dockerfile)
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+      - run: node tests/ui_state.cjs
+      - name: Rust tests (sharing journey runs in the next step)
+        run: cargo test --locked -- --skip direct_sharing --skip admin_document_sharing_e2e --skip admin_message_note_sharing_e2e --skip admin_everyone_sharing_e2e
+      - name: Admin document sharing synthetic E2E
+        env:
+          CARBON_E2E_ARTIFACT_DIR: ${{ runner.temp }}/carbon-sharing-${{ github.run_id }}-${{ github.run_attempt }}
+        run: scripts/e2e-admin-document-sharing.sh
+      - name: Preserve sharing validation evidence
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: admin-document-sharing-${{ github.run_id }}-${{ github.run_attempt }}
+          path: ${{ runner.temp }}/carbon-sharing-${{ github.run_id }}-${{ github.run_attempt }}
+          if-no-files-found: warn
+      - run: cargo clippy --locked --all-targets -- -D warnings
+      - run: docker build -t reefy-carbon:test .
+      - run: python3 tests/container_smoke.py reefy-carbon:test
+      - name: Preserve existing configuration through container recreation
+        run: python3 tests/config_upgrade.py reefy-carbon:test
+
+  ui-navigation:
+    runs-on: ${{ fromJSON((github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name != github.repository) && '["ubuntu-latest"]' || '["self-hosted","Linux","X64","big-bird"]') }}
+    steps:
+      - uses: actions/checkout@v4
+      - name: Desktop and mobile navigation E2E
+        run: |
+          mkdir -p artifacts/navigation
+          docker run --rm --ipc=host \
+            -v "$PWD:/build" -v "$PWD/artifacts/navigation:/artifacts" \
+            -w /build -e CARBON_UI_ARTIFACT_DIR=/artifacts \
+            mcr.microsoft.com/playwright:v1.56.1-noble \
+            sh -c 'npm install --prefix /tmp/carbon-ui-runner playwright@1.56.1 && NODE_PATH=/tmp/carbon-ui-runner/node_modules node tests/navigation_e2e.cjs'
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: navigation-screenshots
+          path: artifacts/navigation

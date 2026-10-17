@@ -1,0 +1,40 @@
+{
+  "slug": "carbon",
+  "version": "v2026.10.17-01",
+  "name": "Carbon",
+  "description": "Coordinate conversations, shared resources and reviewed actions",
+  "image": "ghcr.io/reefyai/reefy-carbon:v2026.10.17-01",
+  "releases": [
+    {
+      "version": "v2026.10.17-01",
+      "image": "ghcr.io/reefyai/reefy-carbon:v2026.10.17-01"
+    }
+  ],
+  "default_port": 18080,
+  "read_only": true,
+  "cap_drop": [
+    "ALL"
+  ],
+  "tmpfs": [
+    "/tmp:rw,noexec,nosuid,size=16m,uid=10001,gid=10001"
+  ],
+  "volumes": {
+    "data": {
+      "mount": "/data",
+      "uid": 10001,
+      "backup": [
+        "borgbase"
+      ],
+      "excludes": []
+    }
+  },
+  "mem_limit": "512m",
+  "pids_limit": 128,
+  "needs_llm": true,
+  "tags": [
+    "assistant",
+    "messaging",
+    "coordination"
+  ],
+  "icon": "icon.png"
+}
