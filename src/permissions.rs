@@ -1425,7 +1425,10 @@ mod tests {
             s.remove_web_admin(b.user.clone()).unwrap()["state"],
             "approved"
         );
-        assert_eq!(reviewers(&s.db.lock().unwrap()).unwrap(), [a.user.clone()]);
+        assert_eq!(
+            reviewers(&s.db.lock().unwrap()).unwrap(),
+            std::slice::from_ref(&a.user)
+        );
         let db = s.db.lock().unwrap();
         // The removed admin gets a notice and loses queued reviews; unrelated requests stay live.
         let notice: String = db
