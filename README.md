@@ -26,7 +26,7 @@ Pick a stream that interests you. No prior skills are needed—we’ll learn tog
 
 - **Telegram:** add another messaging channel alongside WhatsApp.
 - **Email transport:** let people send requests and receive replies by email.
-- **LLM subscriptions:** add web sign-in for model subscriptions alongside API access.
+- **LLM subscriptions:** add web sign-in for model subscriptions alongside API access. ✅ Done for xAI Grok, see [Built at the hackathon](#built-at-the-hackathon-october-17-2026).
 - **Mixture of Models:** explore how combining different models could lower running costs.
 - **Device benchmarks:** measure memory, CPU and disk use to help Carbon run on smaller devices.
 
@@ -43,7 +43,15 @@ Pick a stream that interests you. No prior skills are needed—we’ll learn tog
 
 ## Built at the hackathon (October 17, 2026)
 
-This work came from the **LLM subscriptions** stream. We used it to turn Carbon into an event assistant for the hackathon itself.
+This work came from the **LLM subscriptions** stream. We used it to turn Carbon into an event assistant for the hackathon itself, running on a Reefy mini-PC.
+
+**At a glance:**
+
+- **Grok sign-in:** attach an xAI Grok subscription from the web page, with no proxy needed.
+- **Web admin console:** add or remove admins with one click.
+- **Bigger requests:** reading many files at once no longer fails.
+- **Daily limit notice:** people are told when they hit the limit instead of meeting silence.
+- **Event assistant demo:** answers questions about the hackathon and sends venue photos.
 
 ### Sign in with your Grok subscription
 
@@ -86,6 +94,13 @@ CARBON_IMAGE=reefy-carbon:local ./start-carbon.sh
 ```
 
 Open http://127.0.0.1:18082, link WhatsApp under **Communication Channels**, then attach Grok under **Language model**. We also run this build on our Reefy mini-PC.
+
+### More detail
+
+- [Admin requests from the web UI](docs/admin-web-requests.md) and [managing approval admins](docs/admin-management.md)
+- [First release limits and behavior](docs/first-release.md)
+- Code: `src/providers.rs` (Grok sign-in and routing), `src/llm.rs` (model limits), `src/store.rs` (daily limit notice), `src/permissions.rs` (web admin changes)
+- Tests: `cargo test --locked` (214 pass) and `node tests/ui_state.cjs`
 
 ## What else could Carbon do?
 
