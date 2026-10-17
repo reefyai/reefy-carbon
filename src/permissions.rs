@@ -489,10 +489,9 @@ pub(crate) fn validate(db: &Connection, actor: &str, change: &Change) -> Result<
             Ok(format!("{active}:{revision}"))
         }
         Change::AddApprovalAdmin { user } | Change::RemoveApprovalAdmin { user } => {
+            // The web principal may only stage admin additions/removals; a WhatsApp admin approves.
             ensure!(
-                is_reviewer(db, actor)?
-                    || (actor == WEB_ADMIN_REQUESTER
-                        && matches!(change, Change::AddApprovalAdmin { .. })),
+                is_reviewer(db, actor)? || actor == WEB_ADMIN_REQUESTER,
                 "Only current approval admins may change approval admins"
             );
             known_user(db, user)?;
@@ -905,6 +904,9 @@ impl Store {
     }
     pub fn propose_web_admin(&self, user: String) -> Result<Value> {
         self.propose_internal(WEB_ADMIN_REQUESTER, Change::AddApprovalAdmin { user })
+    }
+    pub fn propose_web_admin_removal(&self, user: String) -> Result<Value> {
+        self.propose_internal(WEB_ADMIN_REQUESTER, Change::RemoveApprovalAdmin { user })
     }
     pub fn propose(&self, actor: &str, change: Change) -> Result<Value> {
         ensure!(
@@ -1360,6 +1362,18 @@ mod tests {
                 }
             )
             .is_err());
+    }
+    #[test]
+    fn web_admin_removals_only_stage_and_keep_the_last_admin() {
+        let (_d, s, a, b, c) = setup();
+        assert!(s.propose_web_admin_removal(c.user.clone()).is_err());
+        let proposal = s.propose_web_admin_removal(b.user.clone()).unwrap();
+        let id = proposal["request_id"].as_str().unwrap();
+        assert_eq!(reviewers(&s.db.lock().unwrap()).unwrap().len(), 2);
+        assert!(approve(&s, &c.recipient, id).contains("sealed reviewer"));
+        assert!(approve(&s, &a.recipient, id).contains("approved"));
+        assert_eq!(reviewers(&s.db.lock().unwrap()).unwrap(), [a.user.clone()]);
+        assert!(s.propose_web_admin_removal(a.user).is_err());
     }
     fn propose(s: &Store, actor: &str, change: Change) -> String {
         s.propose(actor, change).unwrap()["request_id"]

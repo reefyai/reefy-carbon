@@ -285,6 +285,7 @@ fn app(state: Arc<AppState>) -> Router {
         .route("/api/participants", get(participants))
         .route("/api/admins/bootstrap", post(bootstrap))
         .route("/api/admins/requests", post(request_admin))
+        .route("/api/admins/removals", post(request_admin_removal))
         .route("/api/whatsapp/qr.svg", get(qr))
         .route("/api/whatsapp/pair-code", post(pair_code))
         .route("/api/whatsapp/pairing-view", post(pairing_view))
@@ -454,6 +455,18 @@ async fn request_admin(
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
     match rt.store.propose_web_admin(request.user.to_string()) {
+        Ok(value) => Json(value).into_response(),
+        Err(e) => (StatusCode::CONFLICT, e.to_string()).into_response(),
+    }
+}
+async fn request_admin_removal(
+    State(s): State<Arc<AppState>>,
+    Json(request): Json<AdminRequest>,
+) -> Response {
+    let Some(rt) = &s.runtime else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    match rt.store.propose_web_admin_removal(request.user.to_string()) {
         Ok(value) => Json(value).into_response(),
         Err(e) => (StatusCode::CONFLICT, e.to_string()).into_response(),
     }

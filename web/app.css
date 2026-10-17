@@ -52,7 +52,7 @@ a:focus-visible,button:focus-visible,input:focus-visible,summary:focus-visible{o
 
 .provider-row{border-top:1px solid var(--carbon-border);padding:18px 0}.provider-row:first-child{border-top:0;padding-top:0}.provider-row:last-child{padding-bottom:0}.provider-head{display:flex;align-items:center;justify-content:space-between;gap:12px}.provider-row p{margin:10px 0}.provider-row a{color:var(--carbon-accent);overflow-wrap:anywhere}.device-code{display:block;font-family:ui-monospace,monospace;font-size:28px;letter-spacing:4px;user-select:all;color:var(--carbon-text)}.provider-error{color:var(--carbon-error-text)!important}
 #save-model,#request-code,#save-admins,#request-admin,.provider-attach{background:var(--carbon-accent);color:var(--carbon-background);border-color:var(--carbon-accent);font-weight:500}
-#unlink-whatsapp{color:var(--carbon-error-text)}
+#unlink-whatsapp,.remove-admin{color:var(--carbon-error-text)}
 .confirm-modal{width:calc(100% - 32px);max-width:440px;max-height:calc(100dvh - 32px);padding:26px;border:1px solid var(--carbon-border);border-radius:12px;background:var(--carbon-surface);color:var(--carbon-text);box-shadow:0 20px 60px #0008}
 .confirm-modal::backdrop{background:#0009}.confirm-modal h2{margin:0 0 12px}.confirm-modal p{font-size:14px;margin:0 0 24px}.confirm-modal .actions{justify-content:flex-end;margin:0}.confirm-modal button{min-height:44px}
 #whatsapp-confirm-submit{background:var(--carbon-accent);color:var(--carbon-background);border-color:var(--carbon-accent);font-weight:500}

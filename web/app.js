@@ -43,7 +43,7 @@ async function status() {
       const changed=JSON.stringify(sealedAdmins)!==JSON.stringify(data.true_admins);
       sealedAdmins=data.true_admins;
       for(const id of ['save-admins','add-admin']) $(id).disabled=true;
-      $('reviewer-help').textContent='Current admins. Additions require approval through WhatsApp.';
+      $('reviewer-help').textContent='Current admins. Additions and removals require approval through WhatsApp.';
       $('add-admin').hidden=true; $('save-admins').hidden=true;
       $('request-admin-form').hidden=false;
       $('admin-help').textContent='Any admin can use WhatsApp Reply on a request and send approve or reject, including for their own request.';
@@ -148,6 +148,7 @@ function renderAdmins() {
     select.value=value;select.addEventListener('change',()=>{selectedAdmins[index]=select.value});
     row.append(label,select);
     if(!sealedAdmins && ids.length>1) {const remove=document.createElement('button');remove.type='button';remove.textContent='Remove';remove.addEventListener('click',()=>{selectedAdmins.splice(index,1);renderAdmins()});row.append(remove);}
+    if(sealedAdmins && ids.length>1) {const remove=document.createElement('button');remove.type='button';remove.className='remove-admin';remove.textContent='Request removal';remove.addEventListener('click',()=>requestAdminRemoval(value,select.selectedOptions[0]?.textContent||value,remove));row.append(remove);}
     return row;
   }));
   const candidate=$('admin-candidate');
@@ -165,6 +166,14 @@ $('request-admin-form').onsubmit=async event=>{
   } catch(error) {showError(error);}
   finally {$('request-admin').disabled=false;}
 };
+async function requestAdminRemoval(user,label,button) {
+  if(!confirm(`Request removal of ${label} as an approval admin? An admin must approve it in WhatsApp.`)) return;
+  button.disabled=true;
+  try {
+    await api('/api/admins/removals',{user});
+    $('admin-request-status').textContent='Removal pending. An admin must reply approve to the WhatsApp request.';
+  } catch(error) {showError(error);button.disabled=false;}
+}
 async function participants() {
   try {participantOptions=await api('/api/participants');renderAdmins();}
   catch(error){showError(error)}
