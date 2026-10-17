@@ -1,134 +1,67 @@
-# Carbon — Multiplayer AI
+We’re building Carbon, an AI agent built for multiple people and the private knowledge - from community conversations to company information. Try it at the Miami AI Hackathon: send a WhatsApp message to +1 (305) 525-8062 and ask about teams, notable projects, photos and more - knowledge you won’t find on the public web.
 
-<img src="docs/images/carbon-logo.png" alt="Carbon logo" width="80">
+## What we built at the hackathon
 
-One AI agent. Multiple people. Shared context.
+We built this on October 17, 2026, at the [Miami AI Hackathon](https://luma.com/aihackathon26), in the LLM subscriptions track. Carbon now runs as a WhatsApp assistant for the event itself, on a Reefy mini-PC.
 
-<img src="docs/images/carbon-network.jpg" alt="Multiple people connected to the same Carbon AI agent" width="600">
+### Grok subscription sign-in
 
-Carbon is an LLM-powered agent that works with multiple people’s data and messages. Think OpenClaw or Meta Muse, with multiple people able to talk to the same agent.
+Carbon can call xAI Grok directly with your Grok subscription, without the Reefy LLM proxy. To set it up, open the web page, go to Language model and click Attach next to xAI Grok in the LLM Providers panel. Open the link it shows, sign in and confirm the code. Then pick a model such as `xai/grok-4.7` and click Save model.
 
-At the [Miami AI Hackathon](https://luma.com/aihackathon26) on **October 17, 2026**, we’re building Carbon and exploring what multiplayer AI can do for communities, families and businesses.
+The sign-in is stored on the device in `/data/state/secrets/llm-providers.json` and refreshes automatically. The web page never shows the token. Requests for `xai/…` models go straight to xAI, and everything else still goes through the Reefy LLM proxy, so Carbon behaves as before when nothing is attached. OpenAI Codex appears in the panel but isn't built yet.
 
-## Run it on a local mini-PC
+### Admins from the web page
 
-<img src="docs/images/reefy-mini-pc-v2.webp" alt="Mini-PC with Reefy branding resting on a hand" width="480">
+The Admin page can add and remove approval admins, and the change applies at once. Carbon won't remove the last admin. Other permission requests are still approved in WhatsApp.
 
-Carbon runs on a local mini-PC powered by [Reefy OS](https://reefy.ai), with SSH, Docker, Tailscale and LLMs ready for hacking.
+### Larger requests
 
-A mini-PC will be provided at the hackathon—there’s no need to buy one. The event page also links to a [mini-PC listed at $229](https://a.co/d/08CMx102).
+Asking Carbon to read several files at once used to fail with "I couldn't complete this request." It now runs up to 12 tool calls per step and skips any extra calls instead of failing. A request gets up to 8 steps and 256 KB of context, and the last step always produces an answer.
 
-## What can I do at the hackathon?
+### Daily limit message
 
-Pick a stream that interests you. No prior skills are needed—we’ll learn together.
+When someone hits the daily message limit, Carbon tells them once that replies resume after midnight UTC, then ignores their messages until the reset. It used to go quiet without explanation. The limits are `daily_user_limit` and `daily_global_limit` in `/data/state/config.json`. Our device allows 500 messages per person and 5,000 in total.
 
-### Core features
+### How we loaded the event information
 
-- **Telegram:** add another messaging channel alongside WhatsApp.
-- **Email transport:** let people send requests and receive replies by email.
-- **LLM subscriptions:** add web sign-in for model subscriptions alongside API access. ✅ Done for xAI Grok, see [Built at the hackathon](#built-at-the-hackathon-october-17-2026).
-- **Mixture of Models:** explore how combining different models could lower running costs.
-- **Device benchmarks:** measure memory, CPU and disk use to help Carbon run on smaller devices.
+An admin sent Carbon the event information as Markdown files over WhatsApp: schedule, challenges, FAQ, team profiles and the teams index. Each file is shared with everyone separately. Ask Carbon to share it, then reply "approve" to the request. Do this one file at a time, because approving one request cancels any others still waiting.
 
-### Marketing
+Venue photos went in the same way, sent as WhatsApp documents with names like `hackathon-inside-1.jpg` so Carbon can find them by name. After that, anyone can ask the bot "Which teams are competing?" or "What does it look like inside?" and get an answer or the photos.
 
-- **Launch story:** make a launch video and prepare Hacker News, Reddit and Product Hunt posts.
-- **Social outreach:** write X posts and explore influencer outreach.
-- **Investor outreach:** introduce Carbon’s vision and explain what we’re building.
-
-### Use cases
-
-- **Everyday journeys:** build and demonstrate ways Carbon could help communities, families and businesses.
-- **Broken AC demo:** find local AC professionals, compare quotes and arrange an appointment authorized by the resident.
-
-## Built at the hackathon (October 17, 2026)
-
-This work came from the **LLM subscriptions** stream. We used it to turn Carbon into an event assistant for the hackathon itself, running on a Reefy mini-PC.
-
-**At a glance:**
-
-- **Grok sign-in:** attach an xAI Grok subscription from the web page, with no proxy needed.
-- **Web admin console:** add or remove admins with one click.
-- **Bigger requests:** reading many files at once no longer fails.
-- **Daily limit notice:** people are told when they hit the limit instead of meeting silence.
-- **Event assistant demo:** answers questions about the hackathon and sends venue photos.
-
-### Sign in with your Grok subscription
-
-Carbon no longer needs the Reefy LLM proxy to talk to a model.
-
-1. Open the web page, go to **Language model** and find **LLM Providers**.
-2. Click **Attach** next to **xAI Grok**, open the link, sign in and confirm the code.
-3. Pick a model such as `xai/grok-4.7` and click **Save model**.
-
-The sign-in is saved privately on the device in `/data/state/secrets/llm-providers.json`, and it refreshes on its own. The web page never shows the token. Grok models (`xai/…`) are called directly. Everything else still goes through the Reefy LLM proxy, and if nothing is attached Carbon works exactly as before. **OpenAI Codex** is listed as coming soon.
-
-### Manage admins from the web page
-
-On the **Admin** page, **Add admin** and **Remove admin** take effect immediately: the web page is the operator console. The last admin can't be removed. Other permission requests are still approved in WhatsApp.
-
-### Bigger questions no longer fail
-
-Asking Carbon to read several files at once used to end with "I couldn't complete this request". Carbon now allows:
-
-- up to 12 tool calls per step, with extra calls skipped instead of failing the request;
-- 8 steps per request, where the last step always gives an answer;
-- requests up to 256 KB.
-
-### A clear message at the daily limit
-
-When someone reaches the daily message limit, Carbon replies once to say so and that replies resume after midnight UTC, then stays quiet. Before, it just stopped answering. You set the limits in `/data/state/config.json` with `daily_user_limit` and `daily_global_limit`. Our demo device uses 500 per person and 5,000 in total.
-
-### Demo: a bot that knows the hackathon
-
-1. An admin sends the event information to Carbon on WhatsApp as Markdown files: schedule, challenges, FAQ, team profiles and the teams index.
-2. The admin asks Carbon to share each file with everyone, then replies **approve** to each request. Share one file at a time, because approving one request cancels the others that are still waiting.
-3. Venue photos go in as WhatsApp **documents** with clear names such as `hackathon-inside-1.jpg`, so Carbon can find them by name, and are shared the same way.
-4. Anyone can then message the bot: "Which teams are competing?" or "How does the hackathon look inside?" Carbon answers from the shared files and sends the photos.
-
-### Try it
+### Run it
 
 ```sh
 docker build -t reefy-carbon:local .
 CARBON_IMAGE=reefy-carbon:local ./start-carbon.sh
 ```
 
-Open http://127.0.0.1:18082, link WhatsApp under **Communication Channels**, then attach Grok under **Language model**. We also run this build on our Reefy mini-PC.
+Open http://127.0.0.1:18082, link WhatsApp under Communication Channels and attach Grok under Language model.
 
-### More detail
+The changes are documented in [admin requests from the web UI](docs/admin-web-requests.md), [managing approval admins](docs/admin-management.md) and [first release limits](docs/first-release.md). Most of the code is in `src/providers.rs` (Grok sign-in and routing), `src/llm.rs` (model limits), `src/store.rs` (daily limit message) and `src/permissions.rs` (web admin changes). Run the tests with `cargo test --locked` and `node tests/ui_state.cjs`.
 
-- [Admin requests from the web UI](docs/admin-web-requests.md) and [managing approval admins](docs/admin-management.md)
-- [First release limits and behavior](docs/first-release.md)
-- Code: `src/providers.rs` (Grok sign-in and routing), `src/llm.rs` (model limits), `src/store.rs` (daily limit notice), `src/permissions.rs` (web admin changes)
-- Tests: `cargo test --locked` (214 pass) and `node tests/ui_state.cjs`
+## What else Carbon could do
 
-## What else could Carbon do?
-
-### Communities & cities
+### Communities and cities
 
 <img src="docs/images/communities.webp" alt="Homeowner and AC technician discussing an outdoor air-conditioning unit" width="640">
 
-- **“My AC is broken.”** Find trusted local professionals using profiles and resident feedback, negotiate quotes and book a visit.
-- **Community knowledge:** answer parking, insurance and permit questions from HOA documents, and schedule visits within community rules.
+When a resident's AC breaks, Carbon could find trusted local professionals from profiles and resident feedback, negotiate quotes and book a visit. It could also answer parking, insurance and permit questions from HOA documents and schedule visits within community rules.
 
 ### Families
 
 <img src="docs/images/families.webp" alt="Parents and children planning together around a kitchen table" width="640">
 
-- **Shared family context:** coordinate children’s schedules and family goals, track learning and explore colleges around each child’s interests.
-- **Less household admin:** organize medical appointments, insurance and bills while keeping sensitive information private.
+Carbon could keep a family's shared context: children's schedules, family goals, learning progress and college research around each child's interests. It could also handle medical appointments, insurance and bills while keeping sensitive information private.
 
 ### Businesses
 
 <img src="docs/images/businesses.webp" alt="Colleagues coordinating a customer request around a shared laptop" width="640">
 
-- **Service without lost context:** carry customer requests across specialists while preserving the history and knowledge needed at each handoff.
-- **Knowledge at the right level:** keep leadership information confidential while giving interns useful, approved runbooks.
-- **Customer agents are coming:** help businesses handle requests from agents such as Muse.
+Customer requests could move between specialists without losing their history. Leadership information could stay confidential while interns get approved runbooks. Carbon could also help businesses answer requests that come from other agents, such as Muse.
 
 ## Technical documentation
 
-For architecture, diagrams, permissions, storage and implementation details, see the [technical guide](docs/technical-guide.md).
+Architecture, diagrams, permissions, storage and implementation details are in the [technical guide](docs/technical-guide.md). See also:
 
 - [Deployment and configuration](docs/deployment.md)
 - [Current implementation status](docs/implementation-status.md)
