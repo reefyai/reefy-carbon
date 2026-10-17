@@ -58,6 +58,7 @@ impl Store {
           CREATE TABLE IF NOT EXISTS messages(id INTEGER PRIMARY KEY,user_id TEXT NOT NULL REFERENCES users(id),role TEXT NOT NULL,text TEXT NOT NULL);
           CREATE TABLE IF NOT EXISTS outbox(id INTEGER PRIMARY KEY,inbox_id INTEGER UNIQUE NOT NULL REFERENCES inbox(id),recipient TEXT NOT NULL,text TEXT NOT NULL,state TEXT NOT NULL DEFAULT 'pending');
           CREATE TABLE IF NOT EXISTS quotas(user_id TEXT NOT NULL REFERENCES users(id),day TEXT NOT NULL,used INTEGER NOT NULL,PRIMARY KEY(user_id,day));
+          CREATE TABLE IF NOT EXISTS quota_notices(user_id TEXT NOT NULL REFERENCES users(id),day TEXT NOT NULL,PRIMARY KEY(user_id,day));
           CREATE TABLE IF NOT EXISTS resources(id TEXT PRIMARY KEY,owner TEXT NOT NULL REFERENCES users(id),name TEXT NOT NULL,oid TEXT NOT NULL,commit_id TEXT NOT NULL,size INTEGER NOT NULL,lfs_oid TEXT,created INTEGER NOT NULL DEFAULT(unixepoch()));
           CREATE TABLE IF NOT EXISTS audit(id INTEGER PRIMARY KEY,event TEXT NOT NULL,subject TEXT NOT NULL,created INTEGER NOT NULL DEFAULT(unixepoch()));
           CREATE TABLE IF NOT EXISTS activity(id INTEGER PRIMARY KEY AUTOINCREMENT,created INTEGER NOT NULL DEFAULT(unixepoch()),level TEXT NOT NULL,event TEXT NOT NULL,identity TEXT,message TEXT NOT NULL);
@@ -483,6 +484,34 @@ impl Store {
                 || crate::tasks::stop_allowed(&tx, &user, text)?
                 || (crate::permissions::control_verb(text) && quoted.is_some_and(|quote| tx.query_row("SELECT EXISTS(SELECT 1 FROM contact_requests WHERE stanza=? AND owner=? AND owner_identity=? AND state='pending')",params![quote,user,identity],|r|r.get::<_,bool>(0)).unwrap_or(false))));
         if !control_lane && (personal >= self.daily_user_limit || used >= self.daily_global_limit) {
+            // Tell the participant once per day, without a model call; later messages are dropped.
+            if tx.execute(
+                "INSERT OR IGNORE INTO quota_notices VALUES(?,date('now'))",
+                [&user],
+            )? == 1
+            {
+                let notice = if personal >= self.daily_user_limit {
+                    format!("You've reached today's limit of {} messages, so I'll stop replying for now. Replies resume after the daily reset at midnight UTC.", self.daily_user_limit)
+                } else {
+                    "Carbon has reached its message limit for today, so I'll stop replying for now. Replies resume after the daily reset at midnight UTC.".to_owned()
+                };
+                tx.execute(
+                    "INSERT INTO inbox(provider_id,recipient,user_id,text,state) VALUES(?,?,?,?,'done')",
+                    params![provider_id, identity, user, text],
+                )?;
+                tx.execute(
+                    "INSERT INTO outbox(inbox_id,recipient,text) VALUES(?,?,?)",
+                    params![tx.last_insert_rowid(), identity, notice],
+                )?;
+                tx.commit()?;
+                drop(db);
+                self.log(
+                    "info",
+                    "daily_limit_notice",
+                    Some(identity),
+                    "Daily limit reached; participant notified once",
+                );
+            }
             bail!("Daily request limit reached")
         }
         tx.execute("INSERT INTO quotas VALUES(?,date('now'),1) ON CONFLICT(user_id,day) DO UPDATE SET used=used+1",[&user])?;
@@ -1516,6 +1545,34 @@ mod tests {
         drop(s);
         let s = Store::open(d.path()).unwrap();
         assert!(s.ingest("a@test", "51", "hi").is_err());
+    }
+    #[test]
+    fn daily_limit_sends_one_notice_then_stays_silent() {
+        let d = tempfile::tempdir().unwrap();
+        let mut s = Store::open(d.path()).unwrap();
+        s.daily_user_limit = 2;
+        s.ingest("a@test", "1", "hi").unwrap();
+        s.ingest("a@test", "2", "hi").unwrap();
+        assert!(s.ingest("a@test", "3", "over").is_err());
+        assert!(s.ingest("a@test", "4", "over again").is_err());
+        let (_, recipient, text) = s.claim_send().unwrap().unwrap();
+        assert_eq!(recipient, "a@test");
+        assert!(text.contains("today's limit of 2 messages"));
+        assert!(s.claim_send().unwrap().is_none());
+        // Only the two accepted messages reach the model.
+        assert!(s.next().unwrap().is_some() && s.next().unwrap().is_some());
+        assert!(s.next().unwrap().is_none());
+        s.daily_global_limit = 2;
+        assert!(s.ingest("b@test", "1", "hi").is_err());
+        let (_, recipient, text) = s.claim_send().unwrap().unwrap();
+        assert_eq!(recipient, "b@test");
+        assert!(text.starts_with("Carbon has reached its message limit"));
+        drop(s);
+        // The once-per-day notice survives restarts.
+        let mut s = Store::open(d.path()).unwrap();
+        s.daily_global_limit = 2;
+        assert!(s.ingest("b@test", "2", "hi").is_err());
+        assert!(s.claim_send().unwrap().is_none());
     }
     #[test]
     fn lfs_bytes_are_hashed_and_pointer_text_is_not_followed() {

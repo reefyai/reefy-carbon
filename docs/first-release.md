@@ -52,7 +52,7 @@ All of `/data` is included in Reefy's backup volume. Source, libraries and compi
 }
 ```
 
-Limits count accepted requests per UTC day and survive restarts. Administrators can change protected configuration and restart the app. Other fixed pilot limits: 1,000 participants, 100 notes per participant, 16 KiB per note, 8 KiB incoming text, 16 recent messages, 256 KiB model context, eight model rounds (the last one answers without tools), twelve tools per round (extra calls are skipped with an error the model can retry), 800 output tokens per call. Requests over limits are rejected; a friendly rate-limit response is a later slice; sealed reviewers have a reserved approval-command lane. Provider failures receive a generic reply without exposing credentials or gateway details.
+Limits count accepted requests per UTC day and survive restarts. Administrators can change protected configuration and restart the app. Other fixed pilot limits: 1,000 participants, 100 notes per participant, 16 KiB per note, 8 KiB incoming text, 16 recent messages, 256 KiB model context, eight model rounds (the last one answers without tools), twelve tools per round (extra calls are skipped with an error the model can retry), 800 output tokens per call. Requests over limits are rejected; the first rejected message each day gets one fixed notice (no model call) saying the limit was reached and when it resets, and later ones are dropped silently; sealed reviewers have a reserved approval-command lane. Provider failures receive a generic reply without exposing credentials or gateway details.
 
 ## Tests and remaining gates
 
