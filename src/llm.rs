@@ -6,6 +6,12 @@ use std::{sync::Arc, time::Duration};
 
 /// Allows the proxy’s four 60-second attempts plus overhead; turn work is separately bounded.
 pub const REQUEST_TIMEOUT: Duration = Duration::from_secs(300);
+/// Per-turn model budget: steps, tool calls run per step, and request size.
+const MAX_ROUNDS: usize = 8;
+const MAX_TASK_ROUNDS: usize = 10;
+const MAX_TOOL_CALLS: usize = 12;
+const MAX_CONTEXT_BYTES: usize = 256 * 1024;
+const TOOL_LIMIT_ERROR: &str = "Tool call limit per step reached";
 
 #[derive(Debug)]
 pub(crate) struct ModelBusy {
@@ -34,6 +40,7 @@ pub struct Llm {
     pub(crate) client: reqwest::Client,
     pub(crate) base: String,
     pub(crate) key: String,
+    pub(crate) providers: Arc<crate::providers::Providers>,
 }
 impl Llm {
     pub fn from_env() -> Result<Self> {
@@ -61,6 +68,7 @@ impl Llm {
                 .build()?,
             base: base.trim_end_matches('/').to_owned(),
             key,
+            providers: Arc::new(crate::providers::Providers::memory()),
         })
     }
     pub(crate) async fn decode(&self, mut response: reqwest::Response) -> Result<Value> {
@@ -76,7 +84,20 @@ impl Llm {
         }
         Ok(serde_json::from_slice(&bytes)?)
     }
+    /// Attached subscription providers' models plus the proxy's. Either source may be down.
     pub async fn models(&self) -> Result<Vec<String>> {
+        let (mut ids, direct_error) = self.direct_models().await;
+        match self.proxy_models().await {
+            Ok(proxy) => ids.extend(proxy),
+            Err(e) if ids.is_empty() => return Err(direct_error.unwrap_or(e)),
+            Err(_) => {}
+        }
+        ids.sort();
+        ids.dedup();
+        ids.truncate(200);
+        Ok(ids)
+    }
+    async fn proxy_models(&self) -> Result<Vec<String>> {
         let value = self
             .decode(
                 self.client
@@ -288,12 +309,21 @@ impl Llm {
         let mut attachment_attempts = 0;
         let mut profile_attempts = 0;
         let mut message_note_attempts = 0;
-        for round in 0..if task_mode { 10 } else { 4 } {
-            if serde_json::to_vec(&messages)?.len() > 65536 {
+        let rounds = if task_mode {
+            MAX_TASK_ROUNDS
+        } else {
+            MAX_ROUNDS
+        };
+        for round in 0..rounds {
+            if serde_json::to_vec(&messages)?.len() > MAX_CONTEXT_BYTES {
                 bail!("Context size limit reached")
             }
             store.check_work(work)?;
-            let body = json!({"model":model,"messages":messages,"tools":tools,"max_tokens":800,"temperature":0.2});
+            let mut body = json!({"model":model,"messages":messages,"tools":tools,"max_tokens":800,"temperature":0.2});
+            if round + 1 == rounds {
+                // Last step: no more tools, so the model answers with what it has gathered.
+                body["tool_choice"] = json!("none");
+            }
             let data = if let Some(saved) = store.execution_response(work, round, &body)? {
                 store.log_work(
                     work.id,
@@ -333,12 +363,11 @@ impl Llm {
             );
             let message = &data["choices"][0]["message"];
             if let Some(calls) = message["tool_calls"].as_array().filter(|c| !c.is_empty()) {
-                if calls.len() > if task_mode { 12 } else { 4 } {
-                    bail!("Tool call limit exceeded")
-                }
                 messages.push(message.clone());
                 for (index, call) in calls.iter().enumerate() {
-                    if call["function"]["name"] == "read_inquiry" {
+                    // Calls past the per-step limit are skipped with an error, not fatal.
+                    let skipped = index >= MAX_TOOL_CALLS;
+                    if !skipped && call["function"]["name"] == "read_inquiry" {
                         store.exclude_private_replay(work.id)?;
                     }
                     if let Some(content) = store.execution_tool(work, round, index, call)? {
@@ -363,7 +392,9 @@ impl Llm {
                         );
                         continue;
                     }
-                    let result = if call["function"]["name"] == "share_requested_document"
+                    let result = if skipped {
+                        Err(anyhow::anyhow!(TOOL_LIMIT_ERROR))
+                    } else if call["function"]["name"] == "share_requested_document"
                         || (call["function"]["name"] == "propose_change"
                             && store.route_everyone_note_proposal(work, call)?)
                     {
@@ -624,10 +655,16 @@ impl Llm {
                         Some(&work.recipient),
                         message,
                     );
-                    let content = match result {
+                    let mut content = match result {
                         Ok(v) => v.to_string(),
                         Err(e) => json!({"error": model_tool_error(&e)}).to_string(),
                     };
+                    // Keep room for the remaining steps instead of failing the whole turn.
+                    if serde_json::to_vec(&messages)?.len() + content.len() + 16 * 1024
+                        > MAX_CONTEXT_BYTES
+                    {
+                        content = json!({"error":"Result omitted: this request reached its size limit. Answer with what you already have, or ask the participant to narrow the request."}).to_string();
+                    }
                     store.save_execution_tool(work, round, index, &content)?;
                     messages
                         .push(json!({"role":"tool","tool_call_id":call["id"],"content":content}));
@@ -726,6 +763,7 @@ fn model_tool_error(error: &anyhow::Error) -> &str {
         return message;
     }
     match error.to_string().as_str() {
+        TOOL_LIMIT_ERROR => "Skipped: only the first 12 tool calls in a step run. Request this one again in your next step if it is still needed.",
         "Share source resources with this audience first" => "The summary depends on source material this audience cannot read yet. Propose read access to the required source for the same requested audience first. Await its approval before proposing summary access; do not broaden the audience or claim sharing is complete.",
         "Profile changed; read_my_profile before saving again" | "Profile changed; read_my_profile before withdrawing" => "The profile changed. Read read_my_profile again and use its current resource as base; no change was saved.",
         "Use save_my_profile for directory profile revisions" => "Use read_my_profile and save_my_profile to edit directory profiles; revise_note cannot change a published profile.",
@@ -826,6 +864,51 @@ mod tests {
                 .any(|e| e["event"] == "tool_rejected"));
             server.abort();
         }
+    }
+
+    #[tokio::test]
+    async fn extra_tool_calls_are_skipped_and_the_last_step_must_answer() {
+        use axum::{routing::post, Json, Router};
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        let dir = tempfile::tempdir().unwrap();
+        let store = Arc::new(Store::open(dir.path()).unwrap());
+        store
+            .ingest("owner@test", "1", "Save notes from the files I sent you")
+            .unwrap();
+        let work = store.next().unwrap().unwrap();
+        let count = Arc::new(AtomicUsize::new(0));
+        let seen = count.clone();
+        let app = Router::new().route("/v1/chat/completions", post(move |Json(body): Json<Value>| {
+            let round = seen.fetch_add(1, Ordering::SeqCst);
+            async move {
+                let last_step = body["tool_choice"] == "none";
+                assert_eq!(last_step, round == MAX_ROUNDS - 1);
+                if last_step {
+                    return Json(json!({"choices":[{"message":{"role":"assistant","content":"Done."}}]}));
+                }
+                if round == 1 {
+                    let results: Vec<&str> = body["messages"].as_array().unwrap().iter()
+                        .filter(|m| m["role"] == "tool").map(|m| m["content"].as_str().unwrap()).collect();
+                    assert_eq!(results.len(), 13);
+                    assert!(results[..12].iter().all(|r| !r.contains("Skipped")));
+                    assert!(results[12].contains("Skipped"));
+                }
+                let calls: Vec<Value> = (0..if round == 0 { 13 } else { 1 })
+                    .map(|i| json!({"id":format!("call-{round}-{i}"),"type":"function","function":{"name":"list_notes","arguments":"{}"}}))
+                    .collect();
+                Json(json!({"choices":[{"message":{"role":"assistant","tool_calls":calls}}]}))
+            }
+        }));
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let server = tokio::spawn(async move { axum::serve(listener, app).await.unwrap() });
+        let llm = Llm::new(format!("http://{address}/v1"), "test".into()).unwrap();
+        assert_eq!(
+            llm.respond(store.clone(), &work, "test").await.unwrap(),
+            "Done."
+        );
+        assert_eq!(count.load(Ordering::SeqCst), MAX_ROUNDS);
+        server.abort();
     }
 
     fn image_work(store: &Store, identity: &str, bytes: &[u8]) -> (Work, String) {

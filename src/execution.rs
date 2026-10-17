@@ -43,7 +43,7 @@ pub(crate) fn migrate(db: &Connection) -> Result<()> {
 fn room(db: &Connection, bytes: usize) -> Result<()> {
     let used:i64=db.query_row("SELECT COALESCE((SELECT sum(length(request)+COALESCE(length(response),0)) FROM execution_rounds),0)+COALESCE((SELECT sum(length(call)+COALESCE(length(result),0)) FROM execution_tools),0)",[],|r|r.get(0))?;
     ensure!(
-        bytes <= 1024 * 1024 && used + bytes as i64 <= 64 * 1024 * 1024,
+        bytes <= 1024 * 1024 && used + bytes as i64 <= 256 * 1024 * 1024,
         "Execution journal storage limit reached"
     );
     Ok(())

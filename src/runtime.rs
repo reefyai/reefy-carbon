@@ -309,9 +309,14 @@ impl Runtime {
         root: &Path,
         user_limit: i64,
         global_limit: i64,
-        llm: Llm,
+        mut llm: Llm,
     ) -> Result<Arc<Self>> {
         let mut store = Store::open(root)?;
+        if !llm.providers.persistent() {
+            llm.providers = Arc::new(crate::providers::Providers::load(
+                root.join("state/secrets/llm-providers.json"),
+            )?);
+        }
         store.daily_user_limit = user_limit;
         store.daily_global_limit = global_limit;
         let relink_required = store.setting("whatsapp_logout")?.is_some();

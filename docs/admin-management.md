@@ -17,7 +17,7 @@ Group-management capability is separate: it does not permit changing or approvin
 - Existing sent or uncertain notices are not replayed when an admin is removed and re-added. Cancelled, unsent notices may be queued again when the request is still valid.
 - The affected participant receives an informational role-change notice. This is not another approval step.
 
-The web Admin approval section reflects the current set but stays read-only after initial setup. Subsequent changes go through identified WhatsApp participants. The bootstrap endpoint remains one-use; refreshing the page, restarting or removing an admin never reopens it.
+The web Admin approval section reflects the current set after initial setup. It can add or remove an admin immediately (never the last one) without WhatsApp approval, because the web console is the operator. The bootstrap endpoint remains one-use; refreshing the page, restarting or removing an admin never reopens it.
 
 Phone/LID labels cached from the native WhatsApp adapter are display metadata only. Labels cannot merge participants, relink identities or confer authority. Canonical notices freeze their displayed target when proposed; authorization remains bound to internal UUIDs and the exact verified transport identity. Labels and role state live under `/data/state`, within the existing whole-data backup.
 

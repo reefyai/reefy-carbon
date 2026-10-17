@@ -43,10 +43,10 @@ async function status() {
       const changed=JSON.stringify(sealedAdmins)!==JSON.stringify(data.true_admins);
       sealedAdmins=data.true_admins;
       for(const id of ['save-admins','add-admin']) $(id).disabled=true;
-      $('reviewer-help').textContent='Current admins. Additions require approval through WhatsApp.';
+      $('reviewer-help').textContent='Current admins. Adding or removing an admin here takes effect immediately.';
       $('add-admin').hidden=true; $('save-admins').hidden=true;
       $('request-admin-form').hidden=false;
-      $('admin-help').textContent='Any admin can use WhatsApp Reply on a request and send approve or reject, including for their own request.';
+      $('admin-help').textContent='Admins approve other requests in WhatsApp: use Reply on a request and send approve or reject.';
       if(changed) {renderAdmins(); if(activePage === 'admin') participants();}
     }
   } catch (error) { showError(error); }
@@ -59,9 +59,80 @@ async function models() {
     $('model').disabled = !data.models.length;
     $('save-model').disabled = !data.models.length;
     if (selectedModel) $('model').value = selectedModel;
-    $('model-help').textContent = data.models.length ? (selectedModel ? `Selected: ${selectedModel}` : 'Choose a model to enable replies.') : 'No models reported. Configure a provider in Reefy.';
-  } catch (_) { $('model-help').textContent = 'Cannot reach Reefy LLM proxy. Configure a provider in Reefy, then refresh.'; }
+    $('model-help').textContent = data.models.length ? (selectedModel ? `Selected: ${selectedModel}` : 'Choose a model to enable replies.') : 'No models reported. Attach a provider above or configure one in Reefy.';
+  } catch (_) { $('model-help').textContent = 'No models available. Attach a provider above, or configure the Reefy LLM proxy, then refresh.'; }
   finally { $('reload-models').disabled = false; }
+}
+const upcomingProviders = [{slug: 'codex', name: 'OpenAI Codex', upcoming: true}];
+let providerData = null;
+let providerBusy = false;
+let providerTimer = null;
+function providerState(p) {
+  if (p.upcoming) return 'Coming soon';
+  if (p.attached) return 'Attached';
+  return p.pending ? 'Waiting for sign-in…' : 'Not attached';
+}
+function renderProviders() {
+  const rows = [...(providerData || []), ...upcomingProviders.filter(u => !(providerData || []).some(p => p.slug === u.slug))];
+  $('provider-rows').replaceChildren(...rows.map(p => {
+    const row = document.createElement('div'); row.className = 'provider-row';
+    const head = document.createElement('div'); head.className = 'provider-head';
+    const name = document.createElement('strong'); name.textContent = p.name;
+    const state = document.createElement('span'); state.className = 'status'; state.textContent = providerState(p);
+    head.append(name, state); row.append(head);
+    if (p.pending) {
+      const link = document.createElement('a');
+      link.href = p.pending.verification_uri_complete || p.pending.verification_uri;
+      link.target = '_blank'; link.rel = 'noopener noreferrer'; link.textContent = p.pending.verification_uri;
+      const open = document.createElement('p'); open.append('1. Open ', link);
+      const enter = document.createElement('p'); enter.textContent = '2. Sign in and confirm this code:';
+      const code = document.createElement('output'); code.className = 'device-code'; code.textContent = p.pending.user_code;
+      const expiry = document.createElement('p'); expiry.className = 'provider-expiry';
+      expiry.dataset.expires = String(Date.now() + p.pending.expires_in * 1000);
+      row.append(open, enter, code, expiry);
+    }
+    if (p.error) { const error = document.createElement('p'); error.className = 'provider-error'; error.textContent = p.error; row.append(error); }
+    const actions = document.createElement('div'); actions.className = 'actions';
+    const button = document.createElement('button'); button.type = 'button';
+    if (p.upcoming) { button.textContent = 'Attach'; button.disabled = true; }
+    else if (p.attached) { button.textContent = 'Detach'; button.onclick = () => providerAction(p, 'detach'); }
+    else if (p.pending) { button.textContent = 'Cancel'; button.onclick = () => providerAction(p, 'detach'); }
+    else { button.textContent = 'Attach'; button.className = 'provider-attach'; button.onclick = () => providerAction(p, 'attach'); }
+    actions.append(button); row.append(actions);
+    return row;
+  }));
+  updateProviderExpiry();
+}
+function updateProviderExpiry() {
+  for (const element of document.querySelectorAll('.provider-expiry')) {
+    const seconds = Math.max(0, Math.ceil((Number(element.dataset.expires) - Date.now()) / 1000));
+    element.textContent = seconds ? `Code expires in ${Math.floor(seconds / 60)}:${String(seconds % 60).padStart(2, '0')}. This page updates when you finish.` : 'Code expired. Click Cancel, then Attach again.';
+  }
+}
+setInterval(updateProviderExpiry, 1000);
+async function providers() {
+  if (providerBusy) return;
+  providerBusy = true;
+  clearTimeout(providerTimer);
+  try {
+    const before = providerData && new Set(providerData.filter(p => p.attached).map(p => p.slug));
+    providerData = (await api('/api/llm-providers')).providers;
+    renderProviders();
+    if (before && providerData.some(p => p.attached && !before.has(p.slug))) models();
+  } catch (error) { showError(error); }
+  finally { providerBusy = false; }
+  if (activePage === 'model' && providerData?.some(p => p.pending)) providerTimer = setTimeout(providers, 2000);
+}
+async function providerAction(p, action) {
+  if (action === 'detach' && p.attached && !confirm(`Detach ${p.name}? Carbon will stop using this subscription.`)) return;
+  $('error').hidden = true;
+  for (const button of $('provider-rows').querySelectorAll('button')) button.disabled = true;
+  try {
+    providerData = (await api(`/api/llm-providers/${encodeURIComponent(p.slug)}/${action}`, {})).providers;
+    if (action === 'detach') models();
+  } catch (error) { showError(error); }
+  renderProviders();
+  providers();
 }
 let participantOptions=[];
 let selectedAdmins=[''];
@@ -77,6 +148,7 @@ function renderAdmins() {
     select.value=value;select.addEventListener('change',()=>{selectedAdmins[index]=select.value});
     row.append(label,select);
     if(!sealedAdmins && ids.length>1) {const remove=document.createElement('button');remove.type='button';remove.textContent='Remove';remove.addEventListener('click',()=>{selectedAdmins.splice(index,1);renderAdmins()});row.append(remove);}
+    if(sealedAdmins && ids.length>1) {const remove=document.createElement('button');remove.type='button';remove.className='remove-admin';remove.textContent='Remove admin';remove.addEventListener('click',()=>removeAdmin(value,select.selectedOptions[0]?.textContent||value,remove));row.append(remove);}
     return row;
   }));
   const candidate=$('admin-candidate');
@@ -89,11 +161,22 @@ $('request-admin-form').onsubmit=async event=>{
   if(!$('admin-candidate').value) {showError(new Error('Choose a participant'));return;}
   $('request-admin').disabled=true;
   try {
+    const label=$('admin-candidate').selectedOptions[0]?.textContent||'Participant';
     await api('/api/admins/requests',{user:$('admin-candidate').value});
-    $('admin-request-status').textContent='Pending approval. An existing admin must reply approve to the WhatsApp request.';
+    $('admin-request-status').textContent=`Added ${label} as an approval admin.`;
+    await status();
   } catch(error) {showError(error);}
   finally {$('request-admin').disabled=false;}
 };
+async function removeAdmin(user,label,button) {
+  if(!confirm(`Remove ${label} as an approval admin? This takes effect immediately.`)) return;
+  button.disabled=true;
+  try {
+    await api('/api/admins/removals',{user});
+    $('admin-request-status').textContent=`Removed ${label} as an approval admin.`;
+    await status();
+  } catch(error) {showError(error);button.disabled=false;}
+}
 async function participants() {
   try {participantOptions=await api('/api/participants');renderAdmins();}
   catch(error){showError(error)}
@@ -323,7 +406,7 @@ function selectPage(name, updateHash = true, focus = true) {
   if (focus) $(activePage + '-title').focus({preventScroll:true});
   updatePairingView();
   if (activePage === 'channels') status();
-  if (activePage === 'model') models();
+  if (activePage === 'model') { providers(); models(); }
   if (activePage === 'admin') { participants(); approvals(); }
   if (activePage === 'activity') activity();
 }

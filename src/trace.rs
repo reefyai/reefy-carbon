@@ -239,7 +239,7 @@ impl Llm {
             json!({"call_id":call,"endpoint":endpoint,"body":body}),
         );
         let result = async {
-            let mut response = request.send().await?;
+            let mut response = self.send(request).await?;
             let status = response.status();
             let retry_after = response.headers().get("retry-after").and_then(|v| v.to_str().ok()).map(|v| v.parse::<u64>().unwrap_or(30));
             let mut bytes = Vec::new();

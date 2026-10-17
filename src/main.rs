@@ -15,6 +15,7 @@ mod permissions;
 mod private_context;
 mod profiles;
 mod progress;
+mod providers;
 mod revisions;
 mod runtime;
 mod scoped_resources;
@@ -278,9 +279,13 @@ fn app(state: Arc<AppState>) -> Router {
         .route("/api/traces/:operation", get(trace_export))
         .route("/api/approval-requests", get(approval_requests))
         .route("/api/model", post(set_model))
+        .route("/api/llm-providers", get(llm_providers))
+        .route("/api/llm-providers/:slug/attach", post(attach_provider))
+        .route("/api/llm-providers/:slug/detach", post(detach_provider))
         .route("/api/participants", get(participants))
         .route("/api/admins/bootstrap", post(bootstrap))
         .route("/api/admins/requests", post(request_admin))
+        .route("/api/admins/removals", post(remove_admin))
         .route("/api/whatsapp/qr.svg", get(qr))
         .route("/api/whatsapp/pair-code", post(pair_code))
         .route("/api/whatsapp/pairing-view", post(pairing_view))
@@ -345,6 +350,58 @@ async fn models(State(s): State<Arc<AppState>>) -> Response {
         Err(_) => (StatusCode::BAD_GATEWAY, "Cannot reach Reefy LLM proxy").into_response(),
     }
 }
+async fn llm_providers(State(s): State<Arc<AppState>>) -> Response {
+    let Some(rt) = &s.runtime else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    Json(rt.llm.providers.status()).into_response()
+}
+async fn attach_provider(
+    State(s): State<Arc<AppState>>,
+    axum::extract::Path(slug): axum::extract::Path<String>,
+) -> Response {
+    let Some(rt) = &s.runtime else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    if rt.llm.providers.spec(&slug).is_none() {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    match rt.llm.providers.start_attach(&slug).await {
+        Ok(status) => {
+            rt.store.log(
+                "info",
+                "llm_provider_sign_in_started",
+                None,
+                "LLM provider sign-in started",
+            );
+            Json(status).into_response()
+        }
+        Err(e) => (StatusCode::BAD_GATEWAY, e.to_string()).into_response(),
+    }
+}
+async fn detach_provider(
+    State(s): State<Arc<AppState>>,
+    axum::extract::Path(slug): axum::extract::Path<String>,
+) -> Response {
+    let Some(rt) = &s.runtime else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    if rt.llm.providers.spec(&slug).is_none() {
+        return StatusCode::NOT_FOUND.into_response();
+    }
+    match rt.llm.providers.detach(&slug) {
+        Ok(status) => {
+            rt.store.log(
+                "info",
+                "llm_provider_detached",
+                None,
+                "LLM provider detached",
+            );
+            Json(status).into_response()
+        }
+        Err(_) => StatusCode::INTERNAL_SERVER_ERROR.into_response(),
+    }
+}
 async fn set_model(
     State(s): State<Arc<AppState>>,
     Json(body): Json<serde_json::Value>,
@@ -397,8 +454,36 @@ async fn request_admin(
     let Some(rt) = &s.runtime else {
         return StatusCode::SERVICE_UNAVAILABLE.into_response();
     };
-    match rt.store.propose_web_admin(request.user.to_string()) {
-        Ok(value) => Json(value).into_response(),
+    match rt.store.add_web_admin(request.user.to_string()) {
+        Ok(value) => {
+            rt.store.log(
+                "info",
+                "approval_admin_added",
+                None,
+                "Approval admin added from web console",
+            );
+            Json(value).into_response()
+        }
+        Err(e) => (StatusCode::CONFLICT, e.to_string()).into_response(),
+    }
+}
+async fn remove_admin(
+    State(s): State<Arc<AppState>>,
+    Json(request): Json<AdminRequest>,
+) -> Response {
+    let Some(rt) = &s.runtime else {
+        return StatusCode::SERVICE_UNAVAILABLE.into_response();
+    };
+    match rt.store.remove_web_admin(request.user.to_string()) {
+        Ok(value) => {
+            rt.store.log(
+                "info",
+                "approval_admin_removed",
+                None,
+                "Approval admin removed from web console",
+            );
+            Json(value).into_response()
+        }
         Err(e) => (StatusCode::CONFLICT, e.to_string()).into_response(),
     }
 }
@@ -681,7 +766,7 @@ mod tests {
         req
     }
     #[tokio::test]
-    async fn web_admin_request_route_enforces_guards_and_only_stages() {
+    async fn web_admin_add_route_enforces_guards_and_applies() {
         let dir = tempfile::tempdir().unwrap();
         let rt = runtime::Runtime::open(dir.path(), 50, 500).unwrap();
         rt.store.ingest("admin@test", "a", "hello").unwrap();
@@ -723,7 +808,7 @@ mod tests {
         }
         assert_eq!(
             rt.store.permission_directory(&candidate.user).unwrap()["can_manage_approval_admins"],
-            false
+            true
         );
         assert!(rt
             .store
@@ -731,7 +816,7 @@ mod tests {
             .unwrap()
             .unwrap()
             .2
-            .contains("Requested from Carbon web UI"));
+            .starts_with("You are now a Carbon approval admin."));
     }
     #[tokio::test]
     async fn trace_download_route_is_authenticated_and_matches_uuid() {
